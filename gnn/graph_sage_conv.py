@@ -8,7 +8,7 @@ dataset = Planetoid(root='../dataset', name='Cora')
 data = dataset[0]
 
 # 分割数据
-# 为了训练和验证，数据集被分成70%用于训练和30%用于测试，前15,728个节点用于训练，最后6,742个节点用于测试集。
+# 为了训练和验证，数据集被分成70%用于训练和30%用于测试。
 # Calculate no. of train nodes
 num_nodes = data.num_nodes
 train_percentage = 0.7

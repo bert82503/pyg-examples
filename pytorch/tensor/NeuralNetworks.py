@@ -17,6 +17,11 @@ import torch.nn as nn
 # To build a neural network in PyTorch, we create a class that inherits from torch.nn.Module and defines its layers and forward pass.
 # 构建神经网络，我们创建一个从 torch.nn.Module 继承的类并定义其层和前向传递。
 
+# 前馈神经网络 - https://zh.wikipedia.org/wiki/%E5%89%8D%E9%A6%88%E7%A5%9E%E7%BB%8F%E7%BD%91%E7%BB%9C
+# 前馈神经网络(Feedforward Neural Network)，是指神经网络的识别-推理架构。
+# 以输入乘上权重来获得输出（输入对输出）：前馈。
+# 在推论的每个阶段，前馈乘法仍然是核心，对于反向传播或透过时间的反向传播来说是不可或缺的。
+
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super(NeuralNetwork, self).__init__()

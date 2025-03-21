@@ -40,6 +40,16 @@ inputs = torch.randn((100, 10))
 targets = torch.randint(0, 2, (100, 1)).float()
 epochs = 20
 
+# 反向传播算法(Backpropagation) - https://zh.wikipedia.org/wiki/%E5%8F%8D%E5%90%91%E4%BC%A0%E6%92%AD%E7%AE%97%E6%B3%95
+# 任何监督式学习算法的目标是找到一个能把一组输入最好地映射到其正确地输出的函数。
+# 反向传播算法的发展的目标和动机是找到一种训练的多层神经网络的方法，于是它可以学习合适的内部表达来让它学习任意的输入到输出的映射。
+# 反向传播算法（BP 算法）主要由两个阶段组成：激励传播与权重更新。
+# 第1阶段：激励传播
+  # 1. （前向传播阶段）将训练输入送入网络以获得预测结果；
+  # 2. （反向传播阶段）对预测结果同训练目标求差(损失函数)。
+# 第2阶段：权重更新
+  # 1. 将输入激励和响应误差相乘，从而获得权重的梯度；
+  # 2. 将这个梯度乘上一个比例并取反后加到权重上。
 for epoch in range(epochs):
     optimizer.zero_grad()  # Reset gradients
     outputs = model(inputs)  # Forward pass

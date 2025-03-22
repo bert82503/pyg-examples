@@ -1,10 +1,17 @@
+
+import os
+import sys
+
+root_path = os.path.abspath(os.path.dirname(os.getcwd()))
+sys.path.append(root_path)
+
 import torch
 import torch.nn.functional as F
 from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import SAGEConv
 
 # Load the dataset
-dataset = Planetoid(root='../dataset', name='Cora')
+dataset = Planetoid(root=root_path + '/dataset', name='Cora')
 data = dataset[0]
 
 # 分割数据

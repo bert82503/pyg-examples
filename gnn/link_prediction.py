@@ -27,11 +27,11 @@ transform = T.Compose([
     T.NormalizeFeatures(),
     T.ToDevice(device),
     T.RandomLinkSplit(num_val=0.1, num_test=0.1, is_undirected=True,
-                      add_negative_train_samples=False)
+                      add_negative_train_samples=False),
 ])
-# 原始数据集、训练集、验证集、测试集
 dataset = Planetoid(root=root_path + '/dataset', name='CiteSeer', transform=transform)
 train_data, val_data, test_data = dataset[0]
+# 原始数据集、训练集、验证集、测试集
 # print(train_data)
 # print(val_data)
 # print(test_data)
@@ -39,6 +39,10 @@ train_data, val_data, test_data = dataset[0]
 # Data(x=[3327, 3703], edge_index=[2, 7284], y=[3327], train_mask=[3327], val_mask=[3327], test_mask=[3327], edge_label=[3642], edge_label_index=[2, 3642])
 # Data(x=[3327, 3703], edge_index=[2, 7284], y=[3327], train_mask=[3327], val_mask=[3327], test_mask=[3327], edge_label=[910], edge_label_index=[2, 910])
 # Data(x=[3327, 3703], edge_index=[2, 8194], y=[3327], train_mask=[3327], val_mask=[3327], test_mask=[3327], edge_label=[910], edge_label_index=[2, 910])
+# print(train_data.edge_label.sum())
+# tensor(3642.)
+# print(val_data.edge_label.sum())
+# tensor(455.)
 
 # 2. GCN链接预测
 # 2.1 负采样

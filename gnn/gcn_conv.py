@@ -1,11 +1,19 @@
+
+import os
+import sys
+
+root_path = os.path.abspath(os.path.dirname(os.getcwd()))
+sys.path.append(root_path)
+
 import torch
 # import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv
 
 # Load the dataset
-dataset = Planetoid(root='../dataset', name='Cora')
+dataset = Planetoid(root=root_path + '/dataset', name='Cora')
 # dataset = Planetoid(root='../dataset', name='CiteSeer')
 data = dataset[0]
 
@@ -32,13 +40,14 @@ print('>>>', data)
 
 # Define the GCN model
 class GCN(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, hidden_channels, out_channels):
         super(GCN, self).__init__()
-        self.conv1 = GCNConv(in_channels, 32)
-        self.conv2 = GCNConv(32, out_channels)
-        self.norm = torch.nn.BatchNorm1d(32)
+        self.conv1 = GCNConv(in_channels, hidden_channels)
+        self.conv2 = GCNConv(hidden_channels, out_channels)
+        self.norm = torch.nn.BatchNorm1d(hidden_channels)
 
-    def forward(self, x, edge_index):
+    # def forward(self, x, edge_index):
+    def forward(self, x: Tensor, edge_index: Tensor) -> Tensor:
         x = self.conv1(x, edge_index)
         x = self.norm(x)
         x = F.relu(x)
@@ -47,7 +56,7 @@ class GCN(torch.nn.Module):
         return x
 
 # Instantiate the model
-model = GCN(dataset.num_features, dataset.num_classes)
+model = GCN(dataset.num_features, 32, dataset.num_classes)
 print('>>>', model)
 # >>> GCN(
 #   (conv1): GCNConv(1433, 32)

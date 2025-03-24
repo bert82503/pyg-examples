@@ -16,7 +16,7 @@ from torch_geometric.nn import GCNConv
 
 # Load the dataset
 # dataset = Planetoid(root=root_path + '/dataset', name='Cora')
-dataset = Planetoid(root='../dataset', name='CiteSeer')
+dataset = Planetoid(root=root_path + '/dataset', name='CiteSeer')
 data = dataset[0]
 
 # 分割数据

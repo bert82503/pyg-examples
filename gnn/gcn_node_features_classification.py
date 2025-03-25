@@ -10,12 +10,13 @@ root_path = os.path.abspath(os.path.dirname(os.getcwd()))
 sys.path.append(root_path)
 
 from torch_geometric.datasets import Planetoid
+import torch_geometric.transforms as T
 
 # Load the dataset
 # 加载数据
 # 包括数据集的下载，若root路径存在数据集，则直接加载数据集
-# dataset = Planetoid(root=root_path + '/dataset', name='Cora')
-dataset = Planetoid(root=root_path + '/dataset', name='Citeseer')
+dataset = Planetoid(root=root_path + '/dataset', name='Cora', transform=T.NormalizeFeatures())
+# dataset = Planetoid(root=root_path + '/dataset', name='Citeseer')
 # print(len(dataset))
 # 1
 # 该数据集只有一个图
@@ -37,7 +38,7 @@ data = dataset[0]
 
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, TransformerConv
+from torch_geometric.nn import GCNConv, TransformerConv, GATConv
 
 class GCN(torch.nn.Module):
     # 初始化
@@ -89,8 +90,8 @@ class Transformer(torch.nn.Module):
         # 注意这里输出的是节点的特征，维度为[节点数, 类别数]
         return x
 # 实例化模型
-model = Transformer(dataset.num_features, 16, dataset.num_classes)
-print(model)
+# model = Transformer(dataset.num_features, 16, dataset.num_classes)
+# print(model)
 # Cora
 # Transformer(
 #   (conv1): TransformerConv(1433, 16, heads=1)
@@ -101,6 +102,30 @@ print(model)
 #   (conv1): TransformerConv(3703, 16, heads=1)
 #   (conv2): TransformerConv(16, 6, heads=1)
 # )
+
+# 图注意力网络（GAT）
+# 图注意力网络（Graph Attention Network, GAT）引入了注意力机制，通过计算节点与其邻居节点之间的注意力权重，来进行加权特征聚合。
+# GAT的核心在于：
+# 1. 计算注意力系数：通过节点特征计算节点之间的相似度。
+# 2. 加权聚合：根据注意力系数对邻居节点特征进行加权求和。
+# 3.4 聚合和更新操作
+# 聚合和更新操作是图神经网络中节点特征向量的聚合和更新过程。
+# 聚合操作从邻居节点收集特征，更新操作则使用聚合后的特征更新节点的特征向量。
+class GAT(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels):
+        super(GAT, self).__init__()
+        self.conv1 = GATConv(in_channels, hidden_channels, heads=8, concat=True)
+        self.conv2 = GATConv(hidden_channels * 8, out_channels, heads=1, concat=True)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index)
+        x = F.elu(x)
+        x = self.conv2(x, edge_index)
+        return F.log_softmax(x, dim=1)
+        # return x
+# 实例化模型
+model = GAT(dataset.num_features, 8, dataset.num_classes)
+print(model)
 
 # 选择优化器
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)

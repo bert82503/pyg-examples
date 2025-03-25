@@ -5,6 +5,8 @@ import os
 import sys
 
 root_path = os.path.abspath(os.path.dirname(os.getcwd()))
+# print(root_path)
+# /Users/lihuagang/Documents/python-workspace/pyg-examples
 sys.path.append(root_path)
 
 from torch_geometric.datasets import Planetoid

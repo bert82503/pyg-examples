@@ -12,7 +12,7 @@ from torch_geometric.data import (
 )
 
 
-class Taobao(InMemoryDataset):
+class LeKe(InMemoryDataset):
     r"""Taobao is a dataset of user behaviors from Taobao offered by Alibaba,
     provided by the `Tianchi Alicloud platform
     <https://tianchi.aliyun.com/dataset/649>`_.
@@ -39,8 +39,8 @@ class Taobao(InMemoryDataset):
             (default: :obj:`False`)
 
     """
-    url = ('https://alicloud-dev.oss-cn-hangzhou.aliyuncs.com/'
-           'UserBehavior.csv.zip')
+    url = ('https://www.leoao.com/'
+           'LeKeUserBehavior.csv.zip')
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class Taobao(InMemoryDataset):
 
     @property
     def raw_file_names(self) -> str:
-        return 'UserBehavior.csv'
+        return 'LeKeUserBehavior.csv'
 
     @property
     def processed_file_names(self) -> str:
@@ -69,23 +69,25 @@ class Taobao(InMemoryDataset):
     def process(self) -> None:
         import pandas as pd
 
-        cols = ['userId', 'itemId', 'categoryId', 'behaviorType', 'timestamp']
+        # user_id,store_id,city_id,behavior_type,behavior_time
+        cols = ['userId', 'storeId', 'cityId', 'behaviorType', 'behaviorTime']
         df = pd.read_csv(self.raw_paths[0], names=cols)
 
         # Time representation (YYYY.MM.DD-HH:MM:SS -> Integer)
         # start: 1511539200 = 2017.11.25-00:00:00
         # end:   1512316799 = 2017.12.03-23:59:59
-        start = 1511539200
-        end = 1512316799
-        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
+        # TODO
+        # start = 1511539200
+        # end = 1512316799
+        # df = df[(df["behaviorTime"] >= start) & (df["behaviorTime"] <= end)]
 
         df = df.drop_duplicates()
 
-        behavior_dict = {'pv': 0, 'cart': 1, 'buy': 2, 'fav': 3}
-        df['behaviorType'] = df['behaviorType'].map(behavior_dict)
+        # behavior_dict = {'run': 1, 'door': 2, 'gc': 3, 'cp': 4, 'pr': 5}
+        # df['behaviorType'] = df['behaviorType'].map(behavior_dict)
 
         num_entries = {}
-        for name in ['userId', 'itemId', 'categoryId']:
+        for name in ['userId', 'storeId', 'cityId']:
             # Map IDs to consecutive integers:
             value, df[name] = np.unique(df[[name]].values, return_inverse=True)
             num_entries[name] = value.shape[0]
@@ -93,20 +95,20 @@ class Taobao(InMemoryDataset):
         data = HeteroData()
 
         data['user'].num_nodes = num_entries['userId']
-        data['item'].num_nodes = num_entries['itemId']
-        data['category'].num_nodes = num_entries['categoryId']
+        data['store'].num_nodes = num_entries['storeId']
+        data['city'].num_nodes = num_entries['cityId']
 
         row = torch.from_numpy(df['userId'].values)
-        col = torch.from_numpy(df['itemId'].values)
-        data['user', 'item'].edge_index = torch.stack([row, col], dim=0)
-        data['user', 'item'].time = torch.from_numpy(df['timestamp'].values)
+        col = torch.from_numpy(df['storeId'].values)
+        data['user', 'store'].edge_index = torch.stack([row, col], dim=0)
+        data['user', 'store'].time = torch.from_numpy(df['behaviorTime'].values)
         behavior = torch.from_numpy(df['behaviorType'].values)
-        data['user', 'item'].behavior = behavior
+        data['user', 'store'].behavior = behavior
 
-        df = df[['itemId', 'categoryId']].drop_duplicates()
-        row = torch.from_numpy(df['itemId'].values)
-        col = torch.from_numpy(df['categoryId'].values)
-        data['item', 'category'].edge_index = torch.stack([row, col], dim=0)
+        df = df[['storeId', 'cityId']].drop_duplicates()
+        row = torch.from_numpy(df['storeId'].values)
+        col = torch.from_numpy(df['cityId'].values)
+        data['store', 'city'].edge_index = torch.stack([row, col], dim=0)
 
         data = data if self.pre_transform is None else self.pre_transform(data)
 

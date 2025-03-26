@@ -69,6 +69,7 @@ class LeKe(InMemoryDataset):
     def process(self) -> None:
         import pandas as pd
 
+        # cols = ['userId', 'itemId', 'categoryId', 'behaviorType', 'timestamp']
         # user_id,store_id,city_id,behavior_type,behavior_time
         cols = ['userId', 'storeId', 'cityId', 'behaviorType', 'behaviorTime']
         df = pd.read_csv(self.raw_paths[0], names=cols)

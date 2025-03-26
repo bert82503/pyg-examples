@@ -57,8 +57,6 @@ class LeKe(InMemoryDataset):
             (default: :obj:`False`)
 
     """
-    # url = ('https://alicloud-dev.oss-cn-hangzhou.aliyuncs.com/'
-    #        'UserBehavior.csv.zip')
     url = ('https://www.leoao.com/'
            'LeKeUserBehavior.csv.zip')
 
@@ -89,24 +87,25 @@ class LeKe(InMemoryDataset):
     def process(self) -> None:
         import pandas as pd
 
-        # cols = ['userId', 'itemId', 'categoryId', 'behaviorType', 'timestamp']
-        cols = ['userId', 'cityId', 'storeId', 'behaviorType', 'behaviorTime']
+        # user_id,store_id,city_id,behavior_type,behavior_time
+        cols = ['userId', 'storeId', 'cityId', 'behaviorType', 'behaviorTime']
         df = pd.read_csv(self.raw_paths[0], names=cols)
 
         # Time representation (YYYY.MM.DD-HH:MM:SS -> Integer)
         # start: 1511539200 = 2017.11.25-00:00:00
         # end:   1512316799 = 2017.12.03-23:59:59
+        # TODO
         # start = 1511539200
         # end = 1512316799
-        df = df[(df["behaviorTime"] >= start) & (df["behaviorTime"] <= end)]
+        # df = df[(df["behaviorTime"] >= start) & (df["behaviorTime"] <= end)]
 
         df = df.drop_duplicates()
 
-        # behavior_dict = {'pv': 0, 'cart': 1, 'buy': 2, 'fav': 3}
+        # behavior_dict = {'run': 1, 'door': 2, 'gc': 3, 'cp': 4, 'pr': 5}
         # df['behaviorType'] = df['behaviorType'].map(behavior_dict)
 
         num_entries = {}
-        for name in ['userId', 'cityId', 'storeId']:
+        for name in ['userId', 'storeId', 'cityId']:
             # Map IDs to consecutive integers:
             value, df[name] = np.unique(df[[name]].values, return_inverse=True)
             num_entries[name] = value.shape[0]
@@ -114,20 +113,20 @@ class LeKe(InMemoryDataset):
         data = HeteroData()
 
         data['user'].num_nodes = num_entries['userId']
-        data['city'].num_nodes = num_entries['cityId']
         data['store'].num_nodes = num_entries['storeId']
+        data['city'].num_nodes = num_entries['cityId']
 
         row = torch.from_numpy(df['userId'].values)
-        col = torch.from_numpy(df['cityId'].values)
-        data['user', 'city'].edge_index = torch.stack([row, col], dim=0)
-        data['user', 'city'].time = torch.from_numpy(df['behaviorTime'].values)
-        behavior = torch.from_numpy(df['behaviorType'].values)
-        data['user', 'city'].behavior = behavior
-
-        df = df[['cityId', 'storeId']].drop_duplicates()
-        row = torch.from_numpy(df['cityId'].values)
         col = torch.from_numpy(df['storeId'].values)
-        data['city', 'store'].edge_index = torch.stack([row, col], dim=0)
+        data['user', 'store'].edge_index = torch.stack([row, col], dim=0)
+        data['user', 'store'].time = torch.from_numpy(df['behaviorTime'].values)
+        behavior = torch.from_numpy(df['behaviorType'].values)
+        data['user', 'store'].behavior = behavior
+
+        df = df[['storeId', 'cityId']].drop_duplicates()
+        row = torch.from_numpy(df['storeId'].values)
+        col = torch.from_numpy(df['cityId'].values)
+        data['store', 'city'].edge_index = torch.stack([row, col], dim=0)
 
         data = data if self.pre_transform is None else self.pre_transform(data)
 
@@ -157,18 +156,18 @@ class UserGNNEncoder(torch.nn.Module):
 
     def forward(self, x_dict, edge_index_dict):
         item_x = self.conv1(
-            x_dict['item'],
-            edge_index_dict[('item', 'to', 'item')],
+            x_dict['store'],
+            edge_index_dict[('store', 'to', 'store')],
         ).relu()
 
         user_x = self.conv2(
-            (x_dict['item'], x_dict['user']),
-            edge_index_dict[('item', 'rev_to', 'user')],
+            (x_dict['store'], x_dict['user']),
+            edge_index_dict[('store', 'rev_to', 'user')],
         ).relu()
 
         user_x = self.conv3(
             (item_x, user_x),
-            edge_index_dict[('item', 'rev_to', 'user')],
+            edge_index_dict[('store', 'rev_to', 'user')],
         ).relu()
 
         return self.lin(user_x)
@@ -201,24 +200,24 @@ class Model(torch.nn.Module):
     def forward(self, x_dict, edge_index_dict, edge_label_index):
         z_dict = {}
         x_dict['user'] = self.user_emb(x_dict['user'])
-        x_dict['item'] = self.item_emb(x_dict['item'])
-        z_dict['item'] = self.item_encoder(
-            x_dict['item'],
-            edge_index_dict[('item', 'to', 'item')],
+        x_dict['store'] = self.item_emb(x_dict['store'])
+        z_dict['store'] = self.item_encoder(
+            x_dict['store'],
+            edge_index_dict[('store', 'to', 'store')],
         )
         z_dict['user'] = self.user_encoder(x_dict, edge_index_dict)
 
-        return self.decoder(z_dict['user'], z_dict['item'], edge_label_index)
+        return self.decoder(z_dict['user'], z_dict['store'], edge_label_index)
 
 
 def run_train(data, train_data, val_data, test_data, args):
     print("Setting up Data Loaders...")
-    train_edge_label_idx = train_data[('user', 'to', 'item')].edge_label_index.clone()
+    train_edge_label_idx = train_data[('user', 'to', 'store')].edge_label_index.clone()
 
     train_loader = LinkNeighborLoader(
         data=train_data,
         num_neighbors=[8, 4],
-        edge_label_index=(('user', 'to', 'item'), train_edge_label_idx),
+        edge_label_index=(('user', 'to', 'store'), train_edge_label_idx),
         neg_sampling=NegativeSampling(NegativeSamplingMode.binary),
         batch_size=args.batch_size,
         shuffle=True,
@@ -232,10 +231,10 @@ def run_train(data, train_data, val_data, test_data, args):
         data=val_data,
         num_neighbors=[8, 4],
         edge_label_index=(
-            ('user', 'to', 'item'),
-            val_data[('user', 'to', 'item')].edge_label_index,
+            ('user', 'to', 'store'),
+            val_data[('user', 'to', 'store')].edge_label_index,
         ),
-        edge_label=val_data[('user', 'to', 'item')].edge_label,
+        edge_label=val_data[('user', 'to', 'store')].edge_label,
         batch_size=args.batch_size,
         shuffle=False,
         # num_workers=args.num_workers,
@@ -247,10 +246,10 @@ def run_train(data, train_data, val_data, test_data, args):
         data=test_data,
         num_neighbors=[8, 4],
         edge_label_index=(
-            ('user', 'to', 'item'),
-            test_data[('user', 'to', 'item')].edge_label_index,
+            ('user', 'to', 'store'),
+            test_data[('user', 'to', 'store')].edge_label_index,
         ),
-        edge_label=test_data[('user', 'to', 'item')].edge_label,
+        edge_label=test_data[('user', 'to', 'store')].edge_label,
         batch_size=args.batch_size,
         shuffle=False,
         # num_workers=args.num_workers,
@@ -268,10 +267,10 @@ def run_train(data, train_data, val_data, test_data, args):
             pred = model(
                 batch.x_dict,
                 batch.edge_index_dict,
-                batch['user', 'item'].edge_label_index,
+                batch['user', 'store'].edge_label_index,
             )
             loss = F.binary_cross_entropy_with_logits(
-                pred, batch['user', 'item'].edge_label)
+                pred, batch['user', 'store'].edge_label)
 
             loss.backward()
             optimizer.step()
@@ -288,9 +287,9 @@ def run_train(data, train_data, val_data, test_data, args):
             pred = model(
                 batch.x_dict,
                 batch.edge_index_dict,
-                batch['user', 'item'].edge_label_index,
+                batch['user', 'store'].edge_label_index,
             ).sigmoid().view(-1).cpu()
-            target = batch['user', 'item'].edge_label.long().cpu()
+            target = batch['user', 'store'].edge_label.long().cpu()
 
             preds.append(pred)
             targets.append(target)
@@ -302,7 +301,7 @@ def run_train(data, train_data, val_data, test_data, args):
 
     model = Model(
         num_users=data['user'].num_nodes,
-        num_items=data['item'].num_nodes,
+        num_items=data['store'].num_nodes,
         hidden_channels=64,
         out_channels=64,
     )
@@ -311,7 +310,7 @@ def run_train(data, train_data, val_data, test_data, args):
         _ = model(
             batch.x_dict,
             batch.edge_index_dict,
-            batch['user', 'item'].edge_label_index,
+            batch['user', 'store'].edge_label_index,
         )
         break
 
@@ -338,41 +337,43 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=4,
                         help="Number of workers per dataloader")
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--epochs', type=int, default=21)
+    parser.add_argument('--epochs', type=int, default=101)
     parser.add_argument('--batch_size', type=int, default=128)
+    # print(osp.join(osp.dirname(osp.realpath(__file__)),
+    #                      '../../data/LeKe'))
     parser.add_argument(
         '--dataset_root_dir', type=str,
         default=osp.join(osp.dirname(osp.realpath(__file__)),
-                         '../../data/Taobao'))
+                         '../../data/LeKe'))
     args = parser.parse_args()
 
     def pre_transform(data):
-        # Compute sparsified item<>item relationships through users:
-        print('Computing item<>item relationships...')
-        mat = to_scipy_sparse_matrix(data['user', 'item'].edge_index).tocsr()
-        mat = mat[:data['user'].num_nodes, :data['item'].num_nodes]
+        # Compute sparsified store<>store relationships through users:
+        print('Computing store<>store relationships...')
+        mat = to_scipy_sparse_matrix(data['user', 'store'].edge_index).tocsr()
+        mat = mat[:data['user'].num_nodes, :data['store'].num_nodes]
         comat = mat.T @ mat
         comat.setdiag(0)
         comat = comat >= 3.
         comat = comat.tocoo()
         row = torch.from_numpy(comat.row).to(torch.long)
         col = torch.from_numpy(comat.col).to(torch.long)
-        data['item', 'item'].edge_index = torch.stack([row, col], dim=0)
+        data['store', 'store'].edge_index = torch.stack([row, col], dim=0)
         return data
 
     dataset = LeKe(args.dataset_root_dir, pre_transform=pre_transform)
     data = dataset[0]
 
     data['user'].x = torch.arange(0, data['user'].num_nodes)
-    data['item'].x = torch.arange(0, data['item'].num_nodes)
+    data['store'].x = torch.arange(0, data['store'].num_nodes)
 
-    # Only consider user<>item relationships for simplicity:
-    del data['category']
-    del data['item', 'category']
-    del data['user', 'item'].time
-    del data['user', 'item'].behavior
+    # Only consider user<>store relationships for simplicity:
+    # del data['city']
+    # del data['store', 'city']
+    # del data['user', 'store'].time
+    # del data['user', 'store'].behavior
 
-    # Add a reverse ('item', 'rev_to', 'user') relation for message passing:
+    # Add a reverse ('store', 'rev_to', 'user') relation for message passing:
     data = T.ToUndirected()(data)
 
     # Perform a link-level split into training, validation, and test edges:
@@ -382,8 +383,8 @@ if __name__ == '__main__':
         num_test=0.1,
         neg_sampling_ratio=1.0,
         add_negative_train_samples=False,
-        edge_types=[('user', 'to', 'item')],
-        rev_edge_types=[('item', 'rev_to', 'user')],
+        edge_types=[('user', 'to', 'store')],
+        rev_edge_types=[('store', 'rev_to', 'user')],
     )(data)
     print('Done!')
 

@@ -5,7 +5,7 @@ import os
 import sys
 
 root_path = os.path.abspath(os.path.dirname(os.getcwd()))
-# print(root_path)
+print(root_path)
 # /Users/lihuagang/Documents/python-workspace/pyg-examples
 sys.path.append(root_path)
 
@@ -16,7 +16,7 @@ import torch_geometric.transforms as T
 # 加载数据
 # 包括数据集的下载，若root路径存在数据集，则直接加载数据集
 dataset = Planetoid(root=root_path + '/dataset', name='Cora', transform=T.NormalizeFeatures())
-# dataset = Planetoid(root=root_path + '/dataset', name='Citeseer')
+# dataset = Planetoid(root=root_path + '/dataset', name='Citeseer', transform=T.NormalizeFeatures())
 # print(len(dataset))
 # 1
 # 该数据集只有一个图
@@ -90,8 +90,8 @@ class Transformer(torch.nn.Module):
         # 注意这里输出的是节点的特征，维度为[节点数, 类别数]
         return x
 # 实例化模型
-# model = Transformer(dataset.num_features, 16, dataset.num_classes)
-# print(model)
+model = Transformer(dataset.num_features, 16, dataset.num_classes)
+print(model)
 # Cora
 # Transformer(
 #   (conv1): TransformerConv(1433, 16, heads=1)
@@ -124,8 +124,8 @@ class GAT(torch.nn.Module):
         return F.log_softmax(x, dim=1)
         # return x
 # 实例化模型
-model = GAT(dataset.num_features, 8, dataset.num_classes)
-print(model)
+# model = GAT(dataset.num_features, 8, dataset.num_classes)
+# print(model)
 
 # 选择优化器
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
@@ -149,12 +149,16 @@ for epoch in range(200):
     loss = train(model, data, optimizer, criterion)
     print(f'Epoch: {epoch+1:03d}, Loss: {loss:.4f}')
 
+from util.visualize import visualize
+
 # 测试
 # model.eval()开启模型的测试模式，利用训练好模型中的各层权重矩阵聚合各层邻居节点的消息，预测目标结点的特征。
 # 测试函数
 def test(model, data):
     model.eval()
     out = model(data.x, data.edge_index)
+    # 可视化
+    visualize(out, color=data.y)
     pred = out.argmax(dim=1)  # 使用最大概率的类别作为预测结果
     correct = int(pred[data.test_mask].eq(data.y[data.test_mask]).sum().item())  # 获取正确标记的节点
     acc = correct / int(data.test_mask.sum())  # 计算正确率
@@ -177,9 +181,8 @@ print(f'Test Accuracy: {test_acc:.4f}')
 # Epoch: 200, Loss: 0.1468
 # Test Accuracy: 0.6740
 
-from util.visualize import visualize
-
-# 可视化
-model.eval()
-out = model(data.x, data.edge_index)
-visualize(out, color=data.y)
+# from util.visualize import visualize
+# # 可视化
+# model.eval()
+# out = model(data.x, data.edge_index)
+# visualize(out, color=data.y)

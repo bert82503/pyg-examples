@@ -132,13 +132,33 @@ def test():
     acc = correct / int(data.test_mask.sum())
     return acc
 
+import hiddenlayer as hl
+import time
+
+# A History object to store metrics
+history1 = hl.History()
+# A Canvas object to draw the metrics
+canvas1 = hl.Canvas()
+# New history and canvas objects
+canvas2 = hl.Canvas()
+
 # Run training and testing
 for epoch in range(200):
 # for epoch in range(20):
     loss = train()
-    acc = test()
-    print(f'Epoch: {epoch + 1}, Loss: {loss:.4f}, Accuracy: {acc:.4f}')
+    accuracy = test()
+    print(f'Epoch: {epoch + 1}, Loss: {loss:.4f}, Accuracy: {accuracy:.4f}')
     # Cora
     # Epoch: 200, Loss: 0.0352, Accuracy: 0.8339
     # CiteSeer
     # Epoch: 200, Loss: 0.1102, Accuracy: 0.7257
+
+    # Log metrics and display them at certain intervals
+    # if epoch % 10 == 0:
+    #     # Store metrics in the history object
+    #     history1.log(epoch, loss=loss, accuracy=accuracy)
+    history1.log(epoch, loss=loss, accuracy=accuracy)
+
+# Plot the two metrics in one graph
+canvas1.draw_plot([history1["loss"]], labels=["Loss"])
+canvas2.draw_plot([history1["accuracy"]], labels=["Accuracy"])

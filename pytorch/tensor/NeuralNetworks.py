@@ -29,11 +29,11 @@ class NeuralNetwork(nn.Module):
         self.fc2 = nn.Linear(16, 8)   # Second layer
         self.fc3 = nn.Linear(8, 1)    # Output layer
 
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = torch.sigmoid(self.fc3(x))
-        return x
+    def forward(self, tensor):
+        vector = torch.relu(self.fc1(tensor))
+        vector = torch.relu(self.fc2(vector))
+        vector = torch.sigmoid(self.fc3(vector))
+        return vector
 
 # 神经网络
 model = NeuralNetwork()

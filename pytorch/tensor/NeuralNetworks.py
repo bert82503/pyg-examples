@@ -37,7 +37,7 @@ class NeuralNetwork(nn.Module):
 
 # 神经网络
 model = NeuralNetwork()
-# print(model)
+print(model)
 # NeuralNetwork(
 #   (fc1): Linear(in_features=10, out_features=16, bias=True)
 #   (fc2): Linear(in_features=16, out_features=8, bias=True)
@@ -46,9 +46,9 @@ model = NeuralNetwork()
 
 # 应用
 # 5x10矩阵向量
-# x = torch.randn(5, 10)
-# y = model(x)
-# print(y)
+x = torch.randn(5, 10)
+y = model(x)
+print(y)
 # tensor([[0.5370],
 #         [0.5463],
 #         [0.5262],

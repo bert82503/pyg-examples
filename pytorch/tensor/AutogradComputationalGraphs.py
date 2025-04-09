@@ -3,7 +3,7 @@ import torch
 # Autograd and Computational Graphs
 # 自动梯度和计算图
 # The autograd module automates gradient calculation for backpropagation.
-# This is crucia in training deep neural networks.
+# This is crucial in training deep neural networks.
 # 自动梯度模块自动计算反向传播的梯度。
 # 这对于训练深度神经网络至关重要。
 

@@ -96,6 +96,10 @@ class Model(torch.nn.Module):
 
         return self.decoder(z_dict['user'], z_dict['item'], edge_label_index)
 
+import atexit
+def cleanup():
+    if dist.is_initialized():
+        dist.destroy_process_group()
 
 def run_train(rank, data, train_data, val_data, test_data, args, world_size):
     if rank == 0:
@@ -188,6 +192,7 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
     dist.init_process_group('nccl', rank=rank, world_size=world_size)
+    atexit.register(cleanup)
     model = Model(
         num_users=data['user'].num_nodes,
         num_items=data['item'].num_nodes,
@@ -222,7 +227,7 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         print(f'Total {args.epochs:02d} epochs: Final Loss: {loss:4f}, '
               f'Best Val AUC: {best_val_auc:.4f}, '
               f'Test AUC: {test_auc:.4f}')
-
+    cleanup()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

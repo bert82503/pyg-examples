@@ -226,11 +226,11 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_workers', type=int, default=16,
+    parser.add_argument('--num_workers', type=int, default=4,
                         help="Number of workers per dataloader")
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--epochs', type=int, default=21)
-    parser.add_argument('--batch_size', type=int, default=2048)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument(
         '--dataset_root_dir', type=str,
         default=osp.join(osp.dirname(osp.realpath(__file__)),

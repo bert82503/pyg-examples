@@ -264,7 +264,7 @@ if __name__ == '__main__':
 
     # Only consider user<>item relationships for simplicity:
     del data['category']
-    del data['item', 'category']
+    del data['item', 'category'].edge_index
     del data['user', 'item'].time
     del data['user', 'item'].behavior
 

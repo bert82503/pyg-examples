@@ -150,6 +150,10 @@ def run_train(data, train_data, val_data, test_data, args):
         for batch in tqdm.tqdm(train_loader):
             optimizer.zero_grad()
 
+            torch.onnx.export(model, (batch.x_dict,
+                batch.edge_index_dict,
+                batch['user', 'item'].edge_label_index), "TaoBao.cpu.model.onnx")
+
             pred = model(
                 batch.x_dict,
                 batch.edge_index_dict,
@@ -209,13 +213,16 @@ def run_train(data, train_data, val_data, test_data, args):
         print("Val")
         val_auc = test(val_loader)
         best_val_auc = max(best_val_auc, val_auc)
-        print(
-            f'Epoch: {epoch:02d}, Loss: {loss:4f}, Val AUC: {val_auc:.4f}')
+        print(f'Epoch: {epoch:02d}, Loss: {loss:4f}, Val AUC: {val_auc:.4f}')
     print("Test")
     test_auc = test(test_loader)
     print(f'Total {args.epochs:02d} epochs: Final Loss: {loss:4f}, '
           f'Best Val AUC: {best_val_auc:.4f}, '
           f'Test AUC: {test_auc:.4f}')
+
+root_path = osp.join(osp.dirname(osp.realpath(__file__)),
+                         '../../data/Taobao')
+print(root_path)
 
 
 if __name__ == '__main__':
@@ -225,10 +232,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--epochs', type=int, default=21)
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument(
-        '--dataset_root_dir', type=str,
-        default=osp.join(osp.dirname(osp.realpath(__file__)),
-                         '../../data/Taobao'))
+    parser.add_argument('--dataset_root_dir', type=str, default=root_path)
     args = parser.parse_args()
 
     def pre_transform(data):
@@ -253,7 +257,7 @@ if __name__ == '__main__':
 
     # Only consider user<>item relationships for simplicity:
     del data['category']
-    del data['item', 'category']
+    del data['item', 'category'].edge_index
     del data['user', 'item'].time
     del data['user', 'item'].behavior
 

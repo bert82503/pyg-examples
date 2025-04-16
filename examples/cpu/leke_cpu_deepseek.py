@@ -8,98 +8,118 @@ import torch.nn.functional as F
 import tqdm
 from sklearn.metrics import roc_auc_score
 from torch.nn import Embedding, Linear
-from torch_geometric.sampler.base import NegativeSamplingMode
-
-from torch_geometric.sampler import NegativeSampling
 
 import torch_geometric.transforms as T
-from examples.cpu.leke import LeKe
+from examples.datasets.leke import LeKe
 from torch_geometric.loader import LinkNeighborLoader
 from torch_geometric.nn import SAGEConv
+from torch_geometric.sampler import NegativeSampling
+from torch_geometric.sampler.base import NegativeSamplingMode
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 
 
+# 商品编码
 class ItemGNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
+        # 二层隐藏层
         self.conv1 = SAGEConv(-1, hidden_channels)
         self.conv2 = SAGEConv(hidden_channels, hidden_channels)
+        # 一层线性变换
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x, edge_index):
+        # 边
         x = self.conv1(x, edge_index).relu()
         x = self.conv2(x, edge_index).relu()
+        # 一层线性变换
         return self.lin(x)
 
 
+# 用户编码
 class UserGNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
+        # 三层隐藏层
         self.conv1 = SAGEConv((-1, -1), hidden_channels)
         self.conv2 = SAGEConv((-1, -1), hidden_channels)
         self.conv3 = SAGEConv((-1, -1), hidden_channels)
+        # 一层线性变换
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict):
+        # 门店->门店
         item_x = self.conv1(
             x_dict['store'],
             edge_index_dict[('store', 'to', 'store')],
         ).relu()
-
+        # 门店->用户
         user_x = self.conv2(
             (x_dict['store'], x_dict['user']),
             edge_index_dict[('store', 'rev_to', 'user')],
         ).relu()
-
+        # 中间值消息传递
         user_x = self.conv3(
             (item_x, user_x),
             edge_index_dict[('store', 'rev_to', 'user')],
         ).relu()
 
+        # 一层线性变换
         return self.lin(user_x)
 
 
+# 边解码
 class EdgeDecoder(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
+        # 二层线性变换
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
     def forward(self, z_src, z_dst, edge_label_index):
+        # 边标签
         row, col = edge_label_index
         z = torch.cat([z_src[row], z_dst[col]], dim=-1)
 
+        # 二层线性变换
         z = self.lin1(z).relu()
         z = self.lin2(z)
         return z.view(-1)
 
 
+# 模型
 class Model(torch.nn.Module):
     def __init__(self, num_users, num_items, hidden_channels, out_channels):
         super().__init__()
+        # 嵌入
         self.user_emb = Embedding(num_users, hidden_channels)
         self.item_emb = Embedding(num_items, hidden_channels)
+        # 编码
         self.item_encoder = ItemGNNEncoder(hidden_channels, out_channels)
         self.user_encoder = UserGNNEncoder(hidden_channels, out_channels)
+        # 解码
         self.decoder = EdgeDecoder(out_channels)
 
     def forward(self, x_dict, edge_index_dict, edge_label_index):
         z_dict = {}
+        # 嵌入
         x_dict['user'] = self.user_emb(x_dict['user'])
         x_dict['store'] = self.item_emb(x_dict['store'])
+        # 编码
         z_dict['store'] = self.item_encoder(
             x_dict['store'],
             edge_index_dict[('store', 'to', 'store')],
         )
         z_dict['user'] = self.user_encoder(x_dict, edge_index_dict)
 
+        # 解码
         return self.decoder(z_dict['user'], z_dict['store'], edge_label_index)
 
 
+# 运行训练
 def run_train(data, train_data, val_data, test_data, args):
     print("Setting up Data Loaders...")
     train_edge_label_idx = train_data[('user', 'to', 'store')].edge_label_index.clone()
-
     train_loader = LinkNeighborLoader(
         data=train_data,
         num_neighbors=[8, 4],
@@ -150,6 +170,10 @@ def run_train(data, train_data, val_data, test_data, args):
         for batch in tqdm.tqdm(train_loader):
             optimizer.zero_grad()
 
+            # torch.onnx.export(model, (batch.x_dict,
+            #     batch.edge_index_dict,
+            #     batch['user', 'item'].edge_label_index), "TaoBao.cpu.model.onnx")
+
             pred = model(
                 batch.x_dict,
                 batch.edge_index_dict,
@@ -185,6 +209,7 @@ def run_train(data, train_data, val_data, test_data, args):
 
         return roc_auc_score(target, pred)
 
+    # 模型
     model = Model(
         num_users=data['user'].num_nodes,
         num_items=data['store'].num_nodes,
@@ -201,7 +226,6 @@ def run_train(data, train_data, val_data, test_data, args):
             batch['user', 'store'].edge_label_index,
         )
         break
-
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss = 0
     best_val_auc = 0
@@ -218,9 +242,6 @@ def run_train(data, train_data, val_data, test_data, args):
           f'Best Val AUC: {best_val_auc:.4f}, '
           f'Test AUC: {test_auc:.4f}')
 
-root_path = osp.join(osp.dirname(osp.realpath(__file__)),
-                         '../../data/LeKe')
-print(root_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -229,7 +250,10 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--epochs', type=int, default=21)
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--dataset_root_dir', type=str, default=root_path)
+    parser.add_argument(
+        '--dataset_root_dir', type=str,
+        default=osp.join(osp.dirname(osp.realpath(__file__)),
+                         '../../data/LeKe'))
     args = parser.parse_args()
 
     def pre_transform(data):
@@ -246,21 +270,25 @@ if __name__ == '__main__':
         data['store', 'store'].edge_index = torch.stack([row, col], dim=0)
         return data
 
+    # 数据集
     dataset = LeKe(args.dataset_root_dir, pre_transform=pre_transform)
-    print(dataset)
     data = dataset[0]
+    print(dataset)
     print(data)
 
+    # 用户、门店
     data['user'].x = torch.arange(0, data['user'].num_nodes)
     data['store'].x = torch.arange(0, data['store'].num_nodes)
 
     # Only consider user<>store relationships for simplicity:
+    # 为了简单起见，仅考虑用户<>门店的关系
     del data['city']
-    del data['store', 'city'].edge_index
+    del data['store', 'city']
     del data['user', 'store'].time
     del data['user', 'store'].behavior
 
     # Add a reverse ('store', 'rev_to', 'user') relation for message passing:
+    # 为消息传递添加反向（'store'，'rev_to'，'user'）关系：
     data = T.ToUndirected()(data)
 
     # Perform a link-level split into training, validation, and test edges:

@@ -1,6 +1,6 @@
 # flake8: noqa
 
-from examples.cpu.leke import (
+from examples.datasets.leke import (
     LeKe,
 )
 

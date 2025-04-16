@@ -22,80 +22,101 @@ from torch_geometric.sampler.base import NegativeSamplingMode
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 
 
+# 商品编码
 class ItemGNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
+        # 二层隐藏层
         self.conv1 = SAGEConv(-1, hidden_channels)
         self.conv2 = SAGEConv(hidden_channels, hidden_channels)
+        # 一层线性变换
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x, edge_index):
+        # 边
         x = self.conv1(x, edge_index).relu()
         x = self.conv2(x, edge_index).relu()
+        # 一层线性变换
         return self.lin(x)
 
 
+# 用户编码
 class UserGNNEncoder(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
+        # 三层隐藏层
         self.conv1 = SAGEConv((-1, -1), hidden_channels)
         self.conv2 = SAGEConv((-1, -1), hidden_channels)
         self.conv3 = SAGEConv((-1, -1), hidden_channels)
+        # 一层线性变换
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict):
+        # 商品->商品
         item_x = self.conv1(
             x_dict['item'],
             edge_index_dict[('item', 'to', 'item')],
         ).relu()
-
+        # 商品->用户
         user_x = self.conv2(
             (x_dict['item'], x_dict['user']),
             edge_index_dict[('item', 'rev_to', 'user')],
         ).relu()
-
+        # 中间值消息传递
         user_x = self.conv3(
             (item_x, user_x),
             edge_index_dict[('item', 'rev_to', 'user')],
         ).relu()
 
+        # 一层线性变换
         return self.lin(user_x)
 
 
+# 边解码
 class EdgeDecoder(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
+        # 二层线性变换
         self.lin1 = Linear(2 * hidden_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, 1)
 
     def forward(self, z_src, z_dst, edge_label_index):
+        # 边标签
         row, col = edge_label_index
         z = torch.cat([z_src[row], z_dst[col]], dim=-1)
 
+        # 二层线性变换
         z = self.lin1(z).relu()
         z = self.lin2(z)
         return z.view(-1)
 
 
+# 模型
 class Model(torch.nn.Module):
     def __init__(self, num_users, num_items, hidden_channels, out_channels):
         super().__init__()
+        # 嵌入
         self.user_emb = Embedding(num_users, hidden_channels)
         self.item_emb = Embedding(num_items, hidden_channels)
+        # 编码
         self.item_encoder = ItemGNNEncoder(hidden_channels, out_channels)
         self.user_encoder = UserGNNEncoder(hidden_channels, out_channels)
+        # 解码
         self.decoder = EdgeDecoder(out_channels)
 
     def forward(self, x_dict, edge_index_dict, edge_label_index):
         z_dict = {}
+        # 嵌入
         x_dict['user'] = self.user_emb(x_dict['user'])
         x_dict['item'] = self.item_emb(x_dict['item'])
+        # 编码
         z_dict['item'] = self.item_encoder(
             x_dict['item'],
             edge_index_dict[('item', 'to', 'item')],
         )
         z_dict['user'] = self.user_encoder(x_dict, edge_index_dict)
 
+        # 解码
         return self.decoder(z_dict['user'], z_dict['item'], edge_label_index)
 
 import atexit
@@ -103,6 +124,7 @@ def cleanup():
     if dist.is_initialized():
         dist.destroy_process_group()
 
+# 运行训练
 def run_train(rank, data, train_data, val_data, test_data, args, world_size):
     if rank == 0:
         print("Setting up Data Loaders...")
@@ -202,6 +224,7 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
     dist.init_process_group('nccl', rank=rank, world_size=world_size)
     # release all resources
     atexit.register(cleanup)
+    # 模型
     model = Model(
         num_users=data['user'].num_nodes,
         num_items=data['item'].num_nodes,
@@ -275,16 +298,19 @@ if __name__ == '__main__':
     print(dataset)
     print(data)
 
+    # 用户、商品
     data['user'].x = torch.arange(0, data['user'].num_nodes)
     data['item'].x = torch.arange(0, data['item'].num_nodes)
 
     # Only consider user<>item relationships for simplicity:
+    # 为了简单起见，仅考虑用户<>商品的关系
     del data['category']
     del data['item', 'category']
     del data['user', 'item'].time
     del data['user', 'item'].behavior
 
     # Add a reverse ('item', 'rev_to', 'user') relation for message passing:
+    # 为消息传递添加反向（'item'，'rev_to'，'user'）关系：
     data = T.ToUndirected()(data)
 
     # Perform a link-level split into training, validation, and test edges:

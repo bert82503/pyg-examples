@@ -12,6 +12,8 @@ import tqdm
 from sklearn.metrics import roc_auc_score
 from torch.nn import Embedding, Linear
 from torch.nn.parallel import DistributedDataParallel
+from torch_geometric.sampler import NegativeSampling
+from torch_geometric.sampler.base import NegativeSamplingMode
 
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Taobao
@@ -111,12 +113,14 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         data=train_data,
         num_neighbors=[8, 4],
         edge_label_index=(('user', 'to', 'item'), train_edge_label_idx),
-        neg_sampling='binary',
+        neg_sampling=NegativeSampling(NegativeSamplingMode.binary),
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         drop_last=True,
     )
+    sampled_train_data = next(iter(train_loader))
+    print(sampled_train_data)
 
     val_loader = LinkNeighborLoader(
         data=val_data,
@@ -130,6 +134,8 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         shuffle=False,
         num_workers=args.num_workers,
     )
+    sampled_val_data = next(iter(val_loader))
+    print(sampled_val_data)
 
     test_loader = LinkNeighborLoader(
         data=test_data,
@@ -143,6 +149,8 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         shuffle=False,
         num_workers=args.num_workers,
     )
+    sampled_test_data = next(iter(test_loader))
+    print(sampled_test_data)
 
     def train():
         model.train()
@@ -192,6 +200,7 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
     dist.init_process_group('nccl', rank=rank, world_size=world_size)
+    # release all resources
     atexit.register(cleanup)
     model = Model(
         num_users=data['user'].num_nodes,
@@ -199,6 +208,8 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         hidden_channels=64,
         out_channels=64,
     ).to(rank)
+    # 输出网络结构
+    print(model)
     # Initialize lazy modules
     for batch in train_loader:
         batch = batch.to(rank)
@@ -210,6 +221,7 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
         break
     model = DistributedDataParallel(model, device_ids=[rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    loss = 0
     best_val_auc = 0
     for epoch in range(1, args.epochs):
         print("Train")
@@ -219,15 +231,16 @@ def run_train(rank, data, train_data, val_data, test_data, args, world_size):
             val_auc = test(val_loader)
             best_val_auc = max(best_val_auc, val_auc)
         if rank == 0:
-            print(
-                f'Epoch: {epoch:02d}, Loss: {loss:4f}, Val AUC: {val_auc:.4f}')
+            print(f'Epoch: {epoch:02d}, Loss: {loss:4f}, Val AUC: {val_auc:.4f}')
     if rank == 0:
         print("Test")
         test_auc = test(test_loader)
         print(f'Total {args.epochs:02d} epochs: Final Loss: {loss:4f}, '
               f'Best Val AUC: {best_val_auc:.4f}, '
               f'Test AUC: {test_auc:.4f}')
+    # release all resources
     cleanup()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -256,15 +269,18 @@ if __name__ == '__main__':
         data['item', 'item'].edge_index = torch.stack([row, col], dim=0)
         return data
 
+    # 数据集
     dataset = Taobao(args.dataset_root_dir, pre_transform=pre_transform)
     data = dataset[0]
+    print(dataset)
+    print(data)
 
     data['user'].x = torch.arange(0, data['user'].num_nodes)
     data['item'].x = torch.arange(0, data['item'].num_nodes)
 
     # Only consider user<>item relationships for simplicity:
     del data['category']
-    del data['item', 'category'].edge_index
+    del data['item', 'category']
     del data['user', 'item'].time
     del data['user', 'item'].behavior
 
